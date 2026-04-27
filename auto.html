@@ -3369,8 +3369,8 @@
                     const reg = await navigator.serviceWorker.ready;
                     const sub = await reg.pushManager.subscribe({
                         userVisibleOnly: true,
-                        // Replace the string below with your Public VAPID Key
-                        applicationServerKey: urlB64ToUint8Array('PASTE_YOUR_PUBLIC_VAPID_KEY_HERE')
+                        // Your Public VAPID Key
+                        applicationServerKey: urlB64ToUint8Array('BKWUx27yPtwTWcQBYo_O9Rjv-z_q2cZ_f_r3Nc8SOl6EFEN3gamdkYviA4RfZSjXpnwzGPI-3O9BoMO_dIjMUU8')
                     });
                     
                     if(APP.driverData && APP.driverData.id) {

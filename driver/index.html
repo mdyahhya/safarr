@@ -1722,6 +1722,16 @@
                 grid-template-columns: repeat(4, 1fr);
             }
         }
+
+        /* Auth Screen Styling */
+        .auth-container { padding: 40px 24px; text-align: center; }
+        .auth-logo { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 2.5rem; color: var(--navy); margin-bottom: 8px; }
+        .auth-logo span { color: var(--accent); }
+        .auth-toggle { display: flex; background: var(--gray-light); border-radius: 12px; padding: 4px; margin-bottom: 30px; }
+        .auth-toggle-btn { flex: 1; padding: 10px; border-radius: 9px; border: none; font-weight: 700; font-size: 0.85rem; cursor: pointer; transition: 0.3s; background: transparent; color: var(--gray); }
+        .auth-toggle-btn.active { background: var(--white); color: var(--navy); box-shadow: 0 4px 10px rgba(0,0,0,0.05); }
+        .auth-form { text-align: left; animation: fadeIn 0.4s ease; }
+        @keyframes fadeIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
     </style>
 </head>
 
@@ -1776,6 +1786,47 @@
                     <div class="lang-native">मराठीत सुरू ठेवा</div>
                 </div>
                 <div class="lang-check" id="check-mr">✓</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ─── SCREEN: AUTH ─────────────────────────────────────── -->
+    <div class="screen hidden" id="screen-auth">
+        <div class="auth-container">
+            <div class="auth-logo">Auto<span>Ride</span></div>
+            <p style="color: var(--gray); margin-bottom: 30px;" id="auth-subtitle">Driver Access Portal</p>
+            
+            <div class="auth-toggle">
+                <button class="auth-toggle-btn active" id="btn-toggle-login" onclick="toggleAuthMode(true)">Sign In</button>
+                <button class="auth-toggle-btn" id="btn-toggle-signup" onclick="toggleAuthMode(false)">New Driver</button>
+            </div>
+
+            <div id="form-login" class="auth-form">
+                <div class="form-group">
+                    <label class="form-label">Mobile Number</label>
+                    <input type="tel" class="form-input" id="login-mobile" placeholder="+91 XXXXX XXXXX">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Security Password</label>
+                    <input type="password" class="form-input" id="login-pass" placeholder="••••••••">
+                </div>
+                <button class="btn-primary mt-16" onclick="handleLogin()">Sign In ➔</button>
+            </div>
+
+            <div id="form-signup" class="auth-form hidden">
+                <div class="form-group">
+                    <label class="form-label">Full Name</label>
+                    <input type="text" class="form-input" id="signup-name" placeholder="John Doe">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Mobile Number</label>
+                    <input type="tel" class="form-input" id="signup-mobile" placeholder="+91 XXXXX XXXXX">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Create Password</label>
+                    <input type="password" class="form-input" id="signup-pass" placeholder="At least 6 characters">
+                </div>
+                <button class="btn-primary mt-16" onclick="handleSignup()">Create Driver Profile 🚀</button>
             </div>
         </div>
     </div>
@@ -2600,29 +2651,90 @@
         window.addEventListener('DOMContentLoaded', init);
 
         async function init() {
-            // Always start fresh from server — no service worker cache for logic
-            if (APP.driverData) {
-                showScreen('screen-app');
+            const saved = localStorage.getItem('sf_driver');
+            const lang = localStorage.getItem('sf_lang');
+
+            if (saved) {
+                APP.driverData = JSON.parse(saved);
+                APP.lang = lang || 'en';
                 applyLang();
-                populateApp();
-                loadRides();
-                subscribeRealtime();
+                showScreen('screen-app');
+                startDashboard(); 
+                return;
+            }
+
+            if (lang) {
+                APP.lang = lang;
+                applyLang();
+                showScreen('screen-auth');
             } else {
                 showScreen('screen-lang');
             }
 
             updateGreeting();
             setInterval(updateGreeting, 60000);
-
-            // Handle back button for tabs
-            window.addEventListener('popstate', (e) => {
-                if (APP.currentTab !== 'home') {
-                    switchTab('home', false);
-                }
-            });
-
-            // PWA Logic
             initPWAInstall();
+        }
+
+        function startDashboard() {
+            populateApp();
+            loadRides();
+            subscribeRealtime();
+            updateGreeting();
+            setInterval(updateGreeting, 60000);
+            initPWAInstall();
+        }
+
+        function toggleAuthMode(isLogin) {
+            document.getElementById('btn-toggle-login').classList.toggle('active', isLogin);
+            document.getElementById('btn-toggle-signup').classList.toggle('active', !isLogin);
+            document.getElementById('form-login').classList.toggle('hidden', !isLogin);
+            document.getElementById('form-signup').classList.toggle('hidden', isLogin);
+            document.getElementById('auth-subtitle').textContent = isLogin ? 'Driver Access Portal' : 'Register as a Partner';
+        }
+
+        async function handleLogin() {
+            const mobile = document.getElementById('login-mobile').value.trim();
+            const pass = document.getElementById('login-pass').value.trim();
+
+            if (!mobile || !pass) { showToastMsg('Enter all details'); return; }
+
+            const { data, error } = await _supabase.from('auto_drivers')
+                .select('*').eq('mobile', mobile).eq('password', pass).single();
+
+            if (error || !data) { showToastMsg('Invalid mobile or password'); return; }
+
+            APP.driverData = data;
+            localStorage.setItem('sf_driver', JSON.stringify(data));
+            showScreen('screen-app');
+            startDashboard();
+            showToastMsg('Welcome back! 👋');
+        }
+
+        async function handleSignup() {
+            const name = document.getElementById('signup-name').value.trim();
+            const mobile = document.getElementById('signup-mobile').value.trim();
+            const pass = document.getElementById('signup-pass').value.trim();
+
+            if (!name || !mobile || !pass) { showToastMsg('Fill all fields'); return; }
+            if (pass.length < 4) { showToastMsg('Password too short'); return; }
+
+            const payload = { full_name: name, mobile: mobile, password: pass };
+            
+            const { data: existing } = await _supabase.from('auto_drivers').select('id').eq('mobile', mobile).single();
+            if (existing) { showToastMsg('Mobile already registered'); return; }
+
+            const { data, error } = await _supabase.from('auto_drivers').insert(payload).select().single();
+            
+            if (error) { showToastMsg('Signup failed: ' + error.message); return; }
+
+            APP.driverData = data;
+            localStorage.setItem('sf_driver', JSON.stringify(data));
+            
+            document.getElementById('inp-name').value = name;
+            document.getElementById('inp-mobile').value = mobile;
+            showScreen('screen-onboard');
+            showToastMsg('Profile created! Now complete onboarding.');
         }
 
         // ═══════════════════════════════════════════════════════════════
@@ -2686,7 +2798,7 @@
             const el = document.getElementById('check-' + lang);
             if (el) el.style.display = 'flex';
             setTimeout(() => {
-                showScreen('screen-onboard');
+                showScreen('screen-auth');
                 applyLang();
                 applyOnboardingLang();
             }, 350);

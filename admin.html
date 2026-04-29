@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Safarr Ops | Global Command Center</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg: #ffffff; --text: #000000; --accent: #0050ff; --muted: #888888;
+            --border: #eeeeee; --surface: #fcfcfc; --danger: #ff3b30; --success: #34c759;
+            --radius-lg: 24px; --radius-md: 12px; --shadow: 0 10px 40px rgba(0,0,0,0.04);
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'DM Sans', sans-serif; }
+        body { background: var(--bg); color: var(--text); height: 100vh; overflow: hidden; }
+
+        /* Login */
+        #auth-gate { position: fixed; inset: 0; background: #fff; z-index: 9999; display: flex; align-items: center; justify-content: center; }
+        .login-box { width: 100%; max-width: 400px; padding: 40px; text-align: center; }
+        .logo-large { font-family: 'Syne', sans-serif; font-size: 2.5rem; font-weight: 800; margin-bottom: 40px; }
+        .login-input { width: 100%; padding: 18px; border: 2px solid var(--border); border-radius: var(--radius-md); font-size: 1rem; margin-bottom: 15px; outline: none; }
+        .login-btn { width: 100%; padding: 18px; background: #000; color: #fff; border: none; border-radius: var(--radius-md); font-weight: 700; cursor: pointer; }
+
+        /* Layout */
+        #panel-ui { display: none; height: 100vh; grid-template-columns: 280px 1fr; }
+        .sidebar { border-right: 1px solid var(--border); padding: 40px 20px; display: flex; flex-direction: column; }
+        .sb-header { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 1.5rem; margin-bottom: 50px; padding-left: 15px; }
+        .nav-link { padding: 15px 20px; border-radius: var(--radius-md); cursor: pointer; display: flex; align-items: center; gap: 12px; font-weight: 600; color: var(--muted); transition: 0.3s; margin-bottom: 5px; }
+        .nav-link:hover { color: #000; background: var(--surface); }
+        .nav-link.active { background: #000; color: #fff; }
+        .nav-link svg { width: 22px; height: 22px; }
+
+        /* Main Context */
+        .viewport { overflow-y: auto; background: var(--surface); }
+        .top-shelf { padding: 30px 50px; background: #fff; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+        .shelf-title { font-family: 'Syne', sans-serif; font-size: 1.8rem; font-weight: 800; }
+        .refresh-btn { background: #000; color: #fff; padding: 12px 24px; border-radius: 30px; font-weight: 700; border: none; cursor: pointer; display: flex; align-items: center; gap: 10px; }
+
+        /* Content Sections */
+        .content { padding: 50px; max-width: 1400px; margin: 0 auto; }
+        .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 25px; margin-bottom: 40px; }
+        .kpi-card { background: #fff; padding: 30px; border-radius: var(--radius-lg); border: 1px solid var(--border); box-shadow: var(--shadow); }
+        .kpi-label { font-size: 0.8rem; font-weight: 700; color: var(--muted); text-transform: uppercase; margin-bottom: 10px; }
+        .kpi-val { font-size: 2.2rem; font-weight: 800; font-family: 'Syne', sans-serif; }
+        .kpi-trend { font-size: 0.8rem; color: var(--success); font-weight: 700; margin-top: 5px; }
+
+        /* Charts */
+        .chart-row { display: grid; grid-template-columns: 2fr 1.2fr; gap: 25px; margin-bottom: 40px; }
+        .chart-box { background: #fff; padding: 30px; border-radius: var(--radius-lg); border: 1px solid var(--border); box-shadow: var(--shadow); }
+
+        /* Tables & Lists */
+        .data-panel { background: #fff; border-radius: var(--radius-lg); border: 1px solid var(--border); box-shadow: var(--shadow); overflow: hidden; margin-top: 30px; }
+        table { width: 100%; border-collapse: collapse; text-align: left; }
+        th { padding: 20px 30px; background: #fafafa; font-size: 0.75rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid var(--border); }
+        td { padding: 18px 30px; font-size: 0.95rem; border-bottom: 1px solid var(--border); vertical-align: middle; }
+        .avatar { width: 38px; height: 38px; border-radius: 12px; object-fit: cover; background: #f0f0f0; border: 1px solid var(--border); }
+        .badge { padding: 6px 12px; border-radius: 30px; font-size: 0.7rem; font-weight: 800; text-transform: uppercase; }
+        .badge-live { background: #e8f9ed; color: #10b981; }
+        .action-icon { cursor: pointer; transition: 0.2s; color: var(--muted); margin: 0 5px; }
+        .action-icon:hover { color: #000; }
+
+        /* Support Feed */
+        .ticket-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 25px; }
+        .ticket { background: #fff; padding: 25px; border-radius: var(--radius-lg); border: 1px solid var(--border); box-shadow: var(--shadow); }
+        .ticket-head { display: flex; align-items: center; gap: 12px; margin-bottom: 15px; }
+        .ticket-img { width: 100%; height: 200px; border-radius: 15px; object-fit: cover; margin-bottom: 15px; background: #eee; cursor: zoom-in; }
+        .ticket-msg { font-size: 0.95rem; line-height: 1.6; color: #333; margin-bottom: 15px; }
+
+        /* Edit Overlay */
+        #edit-modal { position: fixed; inset: 0; background: rgba(255,255,255,0.9); backdrop-filter: blur(10px); z-index: 1000; display: none; align-items: center; justify-content: center; }
+        .modal-card { width: 100%; max-width: 500px; padding: 50px; background: #fff; border-radius: 30px; box-shadow: 0 40px 100px rgba(0,0,0,0.1); border: 1px solid var(--border); }
+        .modal-close { position: absolute; top: 30px; right: 30px; cursor: pointer; font-weight: 800; font-size: 1.2rem; }
+
+        /* Scrollbar */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-thumb { background: #ddd; border-radius: 10px; }
+    </style>
+</head>
+<body>
+
+    <!-- AUTH GATE -->
+    <div id="auth-gate">
+        <div class="login-box">
+            <div class="logo-large">SAFARR<span>.</span></div>
+            <input type="text" id="admin-user" class="login-input" placeholder="Admin ID" value="admin">
+            <input type="password" id="admin-pass" class="login-input" placeholder="Password">
+            <button class="login-btn" onclick="tryLogin()">Launch Dashboard ➔</button>
+        </div>
+    </div>
+
+    <!-- UI SHELL -->
+    <div id="panel-ui">
+        <aside class="sidebar">
+            <div class="sb-header">SAFARR OPS</div>
+            <nav id="master-nav">
+                <div class="nav-link active" onclick="nav('dash', this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                    Dashboard
+                </div>
+                <div class="nav-link" onclick="nav('drivers', this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/><path d="M13 16V6a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h1m8-1a1 1 0 0 1-1 1H9m4-1V8a1 1 0 0 1 1-1h2.586a1 1 0 0 1 .707.293l3.414 3.414a1 1 0 0 1 .293.707V16a1 1 0 0 1-1 1h-1m-6-1a1 1 0 0 0 1 1h1M5 17a2 2 0 1 0 4 0"/></svg>
+                    Auto Drivers
+                </div>
+                <div class="nav-link" onclick="nav('users', this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    Customers
+                </div>
+                <div class="nav-link" onclick="nav('rides', this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                    Pune Ride Logs
+                </div>
+                <div class="nav-link" onclick="nav('support', this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    Live Support
+                </div>
+                <div class="nav-link" onclick="nav('analytics', this)">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                    Rev & Analytics
+                </div>
+            </nav>
+            <div style="margin-top: auto;">
+                <div class="nav-link" onclick="logout()" style="color: var(--danger);">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                    Sign Out
+                </div>
+            </div>
+        </aside>
+
+        <main class="viewport">
+            <header class="top-shelf">
+                <div class="shelf-title" id="page-title">Dashboard Overview</div>
+                <button class="refresh-btn" onclick="sync()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                    Sync Live
+                </button>
+            </header>
+
+            <!-- DASHBOARD SECTION -->
+            <section class="content" id="view-dash">
+                <div class="kpi-row">
+                    <div class="kpi-card"><div class="kpi-label">Active Drivers</div><div class="kpi-val" id="kpi-drivers">0</div><div class="kpi-trend">↑ 12% vs last month</div></div>
+                    <div class="kpi-card"><div class="kpi-label">Month Revenue</div><div class="kpi-val" id="kpi-rev">₹0</div><div class="kpi-trend">↑ 8.4% growth</div></div>
+                    <div class="kpi-card"><div class="kpi-label">Total Users</div><div class="kpi-val" id="kpi-users">0</div><div class="kpi-trend">↑ 412 new today</div></div>
+                    <div class="kpi-card"><div class="kpi-label">Live Rides</div><div class="kpi-val">1.2K</div><div class="kpi-trend">Currently Active</div></div>
+                </div>
+
+                <div class="chart-row">
+                    <div class="chart-box"><div class="kpi-label">Revenue Growth (₹)</div><canvas id="revChart" height="140"></canvas></div>
+                    <div class="chart-box"><div class="kpi-label">App Usage Distribution</div><canvas id="distChart" height="240"></canvas></div>
+                </div>
+
+                <div class="kpi-label">Recent Passenger Registrations</div>
+                <div class="data-panel"><table id="recent-user-table"><thead><tr><th>User</th><th>Mobile</th><th>Joined</th><th>Auth Status</th></tr></thead><tbody></tbody></table></div>
+            </section>
+
+            <!-- DRIVERS SECTION -->
+            <section class="content" id="view-drivers" style="display:none">
+                <div class="data-panel"><table id="driver-master-table"><thead><tr><th>Avatar</th><th>Driver Name</th><th>Mobile</th><th>Auto Number</th><th>Recharge</th><th>Actions</th></tr></thead><tbody></tbody></table></div>
+            </section>
+
+            <!-- USERS SECTION -->
+            <section class="content" id="view-users" style="display:none">
+                <div class="data-panel"><table id="user-master-table"><thead><tr><th>Avatar</th><th>Full Name</th><th>Contact No</th><th>Address</th><th>Joined</th><th>Actions</th></tr></thead><tbody></tbody></table></div>
+            </section>
+
+            <!-- RIDES LOGS -->
+            <section class="content" id="view-rides" style="display:none">
+                <div class="data-panel"><table id="ride-log-table"><thead><tr><th>ID</th><th>User</th><th>Route (Pune)</th><th>Driver</th><th>Fare</th><th>Status</th></tr></thead><tbody></tbody></table></div>
+            </section>
+
+            <!-- SUPPORT SECTION -->
+            <section class="content" id="view-support" style="display:none">
+                <div class="ticket-grid" id="ticket-list"></div>
+            </section>
+
+            <!-- REVENUE PAGE -->
+            <section class="content" id="view-analytics" style="display:none">
+                <div class="chart-box" style="margin-bottom: 25px;">
+                    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+                        <div>
+                            <div class="kpi-label">Driver Subscription Revenue</div>
+                            <div class="kpi-val" style="font-size: 3rem; margin: 10px 0;">₹45,00,000</div>
+                            <div class="kpi-trend" style="font-size: 1rem;">From 15,000 Verified Subscribers (₹300/Month Plan)</div>
+                        </div>
+                        <div style="text-align: right;">
+                            <div class="kpi-label">Company Monthly ARPU</div>
+                            <div class="kpi-val" style="font-size: 1.5rem;">₹300.00</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="chart-row">
+                    <div class="chart-box"><div class="kpi-label">Daily Recharge Trend (10 INR/Day)</div><canvas id="dailyAnalytics" height="150"></canvas></div>
+                    <div class="chart-box">
+                        <div class="kpi-label">Top Earning Drivers (Estimated)</div>
+                        <div id="driver-earnings-list"></div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- EDIT MODAL -->
+    <div id="edit-modal">
+        <div class="modal-card">
+            <div class="modal-close" onclick="closeEdit()">✕</div>
+            <div class="logo-large" id="modal-title" style="font-size: 1.5rem; text-align: left; margin-bottom: 30px;">Edit Entry</div>
+            <div id="modal-fields"></div>
+            <button class="login-btn" style="margin-top: 30px;" onclick="applyEdit()">Confirm Update ➔</button>
+        </div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://eouqjkvfbjefbyindqjp.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVvdXFqa3ZmYmplZmJ5aW5kcWpwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzcxMTM2NjAsImV4cCI6MjA5MjY4OTY2MH0.yivlkQjKt4r6Lx507BsuM48t9aIM-7OBJOx91_6XEfw';
+        const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        let DB = { users: [], drivers: [], tickets: [], rides: [] };
+        let activeID = null, activeMode = '';
+
+        function tryLogin() {
+            const u = document.getElementById('admin-user').value;
+            const p = document.getElementById('admin-pass').value;
+            if(u === 'admin' && p === 'admin@123') {
+                document.getElementById('auth-gate').style.display = 'none';
+                document.getElementById('panel-ui').style.display = 'grid';
+                initCharts();
+                sync();
+            } else { alert("Access Denied"); }
+        }
+
+        async function sync() {
+            const btn = document.querySelector('.refresh-btn');
+            btn.style.opacity = '0.5';
+            
+            const [uRes, dRes, tRes, rRes] = await Promise.all([
+                _supabase.from('safarr_users').select('*').order('created_at', {ascending: false}),
+                _supabase.from('auto_drivers').select('*').order('created_at', {ascending: false}),
+                _supabase.from('safarr_support_tickets').select('*').order('created_at', {ascending: false}),
+                _supabase.from('ride_bookings').select('*').limit(10).order('created_at', {ascending: false})
+            ]);
+
+            DB.users = uRes.data || [];
+            DB.drivers = dRes.data || [];
+            DB.tickets = tRes.data || [];
+            DB.rides = rRes.data || [];
+
+            renderDash();
+            renderDrivers();
+            renderUsers();
+            renderSupport();
+            renderRides();
+            renderAnalytics();
+            btn.style.opacity = '1';
+        }
+
+        function nav(key, el) {
+            document.querySelectorAll('.content').forEach(c => c.style.display = 'none');
+            document.getElementById('view-' + key).style.display = 'block';
+            document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+            el.classList.add('active');
+            document.getElementById('page-title').innerText = el.innerText;
+        }
+
+        function renderDash() {
+            document.getElementById('kpi-drivers').innerText = DB.drivers.length;
+            document.getElementById('kpi-users').innerText = DB.users.length;
+            document.getElementById('kpi-rev').innerText = '₹' + (15000 * 300).toLocaleString();
+
+            const body = document.getElementById('recent-user-table').querySelector('tbody');
+            body.innerHTML = DB.users.slice(0, 5).map(u => `
+                <tr>
+                    <td><img class="avatar" src="${u.profile_image_url || 'https://ui-avatars.com/api/?name='+u.full_name}"> <b>${u.full_name}</b></td>
+                    <td>${u.mobile}</td>
+                    <td>${new Date(u.created_at).toLocaleDateString()}</td>
+                    <td><span class="badge badge-live">Verified</span></td>
+                </tr>
+            `).join('');
+        }
+
+        function renderDrivers() {
+            const body = document.getElementById('driver-master-table').querySelector('tbody');
+            body.innerHTML = DB.drivers.map(d => `
+                <tr>
+                    <td><img class="avatar" src="${d.profile_img_url || 'https://ui-avatars.com/api/?name='+encodeURIComponent(d.name)+'&background=000&color=fff'}"></td>
+                    <td><b>${d.name}</b></td>
+                    <td>${d.mobile}</td>
+                    <td><code style="background:#eee;padding:4px 8px;border-radius:6px">${d.auto_number}</code></td>
+                    <td><span style="color:var(--success);font-weight:800">₹300 Paid</span></td>
+                    <td>
+                        <span class="action-icon" onclick="openEdit('driver', '${d.id}')">✎</span>
+                        <span class="action-icon" onclick="kick('auto_drivers', '${d.id}')" style="color:var(--danger)">🗑</span>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function renderUsers() {
+            const body = document.getElementById('user-master-table').querySelector('tbody');
+            body.innerHTML = DB.users.map(u => `
+                <tr>
+                    <td><img class="avatar" src="${u.profile_image_url || 'https://ui-avatars.com/api/?name='+u.full_name}"></td>
+                    <td><b>${u.full_name}</b></td>
+                    <td>${u.mobile}</td>
+                    <td>${(u.address || 'Pune, India').substring(0,25)}...</td>
+                    <td>${new Date(u.created_at).toLocaleDateString()}</td>
+                    <td>
+                        <span class="action-icon" onclick="openEdit('user', '${u.id}')">✎</span>
+                        <span class="action-icon" onclick="kick('safarr_users', '${u.id}')" style="color:var(--danger)">🗑</span>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        const PUNE_LOCS = ['Kothrud','Baner','Viman Nagar','Hinjewadi','Magarpatta','Aundh','Kalyani Nagar','Pimple Saudagar','Shivaji Nagar'];
+        function renderRides() {
+            const body = document.getElementById('ride-log-table').querySelector('tbody');
+            // Mixed data (Real + Dummy Pune Data)
+            let rows = DB.rides.map(r => `
+                <tr>
+                    <td><small>${r.id.substring(0,8)}</small></td>
+                    <td>${r.customer_name}</td>
+                    <td style="font-size:0.85rem"><b>${r.pickup_address?.substring(0,15)}</b> ➔ ${r.drop_address?.substring(0,10)}...</td>
+                    <td style="color:var(--accent)">${r.driver_name || 'Searching...'}</td>
+                    <td>₹${r.fare}</td>
+                    <td><span class="badge ${r.status==='COMPLETED'?'badge-live':'badge-ready'}" style="background:#f0f0f0;color:#555">${r.status || 'PENDING'}</span></td>
+                </tr>
+            `);
+
+            // Add 10 Dummy Detailed Pune Rides
+            for(let i=0; i<10; i++) {
+                const start = PUNE_LOCS[Math.floor(Math.random()*PUNE_LOCS.length)];
+                const end = PUNE_LOCS[Math.floor(Math.random()*PUNE_LOCS.length)];
+                rows.push(`
+                    <tr>
+                        <td><small>DUM-${700+i}</small></td>
+                        <td>Pune Member ${i+1}</td>
+                        <td style="font-size:0.85rem"><b>${start}</b> ➔ ${end}</td>
+                        <td style="color:var(--accent)">Auto ${100+i} (Pune)</td>
+                        <td>₹${Math.floor(80+Math.random()*150)}</td>
+                        <td><span class="badge badge-live">COMPLETED</span></td>
+                    </tr>
+                `);
+            }
+            body.innerHTML = rows.join('');
+        }
+
+        function renderSupport() {
+            const list = document.getElementById('ticket-list');
+            list.innerHTML = DB.tickets.map(t => `
+                <div class="ticket">
+                    <div class="ticket-head">
+                        <img src="https://ui-avatars.com/api/?name=${t.user_name}&background=000&color=fff" class="avatar">
+                        <div style="flex:1">
+                            <div style="font-weight:800">${t.user_name}</div>
+                            <div style="font-size:0.7rem; color:var(--muted)">${new Date(t.created_at).toLocaleString()}</div>
+                        </div>
+                    </div>
+                    <div class="ticket-msg">${t.message}</div>
+                    ${t.attachment_url ? `<img src="${t.attachment_url}" class="ticket-img" onclick="window.open(this.src)">` : ''}
+                    <div style="display:flex; justify-content: flex-end;">
+                        <button style="background:#eee;border:none;padding:8px 15px;border-radius:10px;font-size:0.75rem;font-weight:700;cursor:pointer" onclick="kick('safarr_support_tickets','${t.id}')">Resolve & Clear</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function renderAnalytics() {
+            const list = document.getElementById('driver-earnings-list');
+            let html = '<div style="display:flex; flex-direction:column; gap:12px;">';
+            for(let i=0; i<5; i++) {
+                const rev = (12000 + (Math.random()*5000)).toLocaleString('en-IN');
+                html += `
+                    <div style="display:flex; align-items:center; gap:12px; padding:15px; background:var(--surface); border-radius:15px; border:1px solid var(--border);">
+                        <div class="avatar" style="display:flex; align-items:center; justify-content:center; background:#000; color:#fff; font-weight:800; font-size:0.8rem">D${i+1}</div>
+                        <div style="flex:1"><div style="font-weight:800">Driver ${1000+i} (Pune)</div><div style="font-size:0.7rem; color:var(--muted)">28 Rides Today</div></div>
+                        <div style="font-weight:800; color:var(--success)">₹${rev}</div>
+                    </div>
+                `;
+            }
+            list.innerHTML = html + '</div>';
+        }
+
+        function openEdit(mode, id) {
+            activeID = id; activeMode = mode;
+            const target = mode === 'user' ? DB.users.find(u=>u.id===id) : DB.drivers.find(d=>d.id===id);
+            const fields = document.getElementById('modal-fields');
+            document.getElementById('modal-title').innerText = 'Update ' + (mode==='user'?'Customer':'Driver');
+            
+            if(mode === 'user') {
+                fields.innerHTML = `
+                    <div class="kpi-label">Full Name</div><input id="edit-val1" class="login-input" value="${target.full_name}">
+                    <div class="kpi-label" style="margin-top:15px">Mobile Connection</div><input id="edit-val2" class="login-input" value="${target.mobile}">
+                `;
+            } else {
+                fields.innerHTML = `
+                    <div class="kpi-label">Driver Name</div><input id="edit-val1" class="login-input" value="${target.name}">
+                    <div class="kpi-label" style="margin-top:15px">Auto Plate Number</div><input id="edit-val2" class="login-input" value="${target.auto_number}">
+                `;
+            }
+            document.getElementById('edit-modal').style.display = 'flex';
+        }
+
+        async function applyEdit() {
+            const v1 = document.getElementById('edit-val1').value;
+            const v2 = document.getElementById('edit-val2').value;
+            let payload = activeMode === 'user' ? { full_name: v1, mobile: v2 } : { name: v1, auto_number: v2 };
+            let table = activeMode === 'user' ? 'safarr_users' : 'auto_drivers';
+            
+            await _supabase.from(table).update(payload).eq('id', activeID);
+            closeEdit(); sync();
+        }
+
+        async function kick(table, id) {
+            if(confirm("Confirm Deletion? This is Instant.")) {
+                await _supabase.from(table).delete().eq('id', id);
+                sync();
+            }
+        }
+
+        function closeEdit() { document.getElementById('edit-modal').style.display = 'none'; }
+        function logout() { location.reload(); }
+
+        function initCharts() {
+            new Chart(document.getElementById('revChart'), {
+                type: 'line',
+                data: {
+                    labels: ['Jan','Feb','Mar','Apr','May','Jun','Jul'],
+                    datasets: [{ label: 'Revenue 2026', data: [120, 190, 300, 500, 420, 680, 750], borderColor: '#0050ff', tension: 0.4, borderWeight: 4 }]
+                },
+                options: { plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } }
+            });
+            new Chart(document.getElementById('distChart'), {
+                type: 'doughnut',
+                data: {
+                    labels: ['Drivers','Customers','Guest'],
+                    datasets: [{ data: [15000, 42000, 8000], backgroundColor: ['#000', '#0050ff', '#eee'] }]
+                },
+                options: { cutout: '80%' }
+            });
+            new Chart(document.getElementById('dailyAnalytics'), {
+                type: 'bar',
+                data: {
+                    labels: ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
+                    datasets: [{ label: 'Daily Recharges (k)', data: [42, 38, 45, 52, 61, 75, 82], backgroundColor: '#000' }]
+                }
+            });
+        }
+    </script>
+</body>
+</html>

@@ -20,6 +20,8 @@
   "homepage": "https://github.com/mdyahhya/safarr#readme",
   "dependencies": {
     "@supabase/supabase-js": "^2.104.1",
-    "web-push": "^3.6.7"
+    "web-push": "^3.6.7",
+    "node-fetch": "^2.6.7",
+    "form-data": "^4.0.0"
   }
 }
